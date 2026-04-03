@@ -509,6 +509,7 @@ resource "aws_instance" "app_3" {
     Name = "${var.project_name}-${var.environment}-app-3"
   }
 }
+
 resource "aws_lb" "app_alb" {
   name               = "capstone-dev-alb"
   internal           = false
@@ -572,6 +573,7 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.app_tg.arn
   }
 }
+
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-${var.environment}-dashboard"
 
@@ -605,8 +607,8 @@ resource "aws_cloudwatch_dashboard" "main" {
 
         properties = {
           metrics = [
-            ["AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", aws_lb_target_group.app_tg.arn_suffix],
-            ["AWS/ApplicationELB", "UnHealthyHostCount", "TargetGroup", aws_lb_target_group.app_tg.arn_suffix]
+            ["AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", aws_lb_target_group.app_tg.arn_suffix, "LoadBalancer", aws_lb.app_alb.arn_suffix],
+            ["AWS/ApplicationELB", "UnHealthyHostCount", "TargetGroup", aws_lb_target_group.app_tg.arn_suffix, "LoadBalancer", aws_lb.app_alb.arn_suffix]
           ]
           period = 300
           stat   = "Average"
@@ -617,6 +619,7 @@ resource "aws_cloudwatch_dashboard" "main" {
     ]
   })
 }
+
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = "${var.project_name}-${var.environment}-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -633,6 +636,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
 
   alarm_description = "CPU usage too high"
 }
+
 resource "aws_cloudwatch_metric_alarm" "alb_unhealthy" {
   alarm_name          = "${var.project_name}-${var.environment}-alb-unhealthy"
   comparison_operator = "GreaterThanThreshold"
@@ -650,6 +654,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy" {
 
   alarm_description = "ALB has unhealthy targets"
 }
+
 resource "aws_cloudwatch_metric_alarm" "status_check" {
   alarm_name          = "${var.project_name}-${var.environment}-status-check"
   comparison_operator = "GreaterThanThreshold"
@@ -667,3 +672,26 @@ resource "aws_cloudwatch_metric_alarm" "status_check" {
   alarm_description = "EC2 instance status check failed"
 }
 
+resource "aws_secretsmanager_secret" "app_secret" {
+  name = "${var.project_name}-${var.environment}-app-secret"
+}
+
+resource "aws_secretsmanager_secret_version" "app_secret_value" {
+  secret_id = aws_secretsmanager_secret.app_secret.id
+  secret_string = jsonencode({
+    DB_PASSWORD = "super-secret-password"
+  })
+}
+
+resource "aws_budgets_budget" "monthly" {
+  name         = "capstone-monthly-budget"
+  budget_type  = "COST"
+  limit_amount = "10"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_filter {
+    name   = "TagKeyValue"
+    values = ["Project$ce-capstone-cloud-platform"]
+  }
+}
